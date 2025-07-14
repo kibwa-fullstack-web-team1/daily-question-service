@@ -4,19 +4,30 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 
-from schemas import question_schema
-from models import question as question_model
-from database import get_db
+from app.schemas import question_schema
+from app.models import question as question_model
+from app.utils.db import get_db
 from app.core.llm_service import get_recommended_question # 추가
+from app.config.config import Config
 
 router = APIRouter(
     prefix="/questions",
     tags=["Questions"]
 )
 
-USER_SERVICE_URL = os.getenv("USER_SERVICE_URL", "http://localhost:8000") # user-service의 기본 URL
+USER_SERVICE_URL = Config.USER_SERVICE_URL # user-service의 기본 URL
 
-@router.post("", response_model=question_schema.Question)
+@router.get("/daily-questions", response_model=question_schema.Question)
+async def get_daily_question(user_id: int, db: Session = Depends(get_db)):
+    """
+    LLM을 연동하여 사용자에게 개인화된 '오늘의 질문'을 추천합니다.
+    """
+    recommended_question = await get_recommended_question(user_id)
+    if not recommended_question:
+        raise HTTPException(status_code=404, detail="No recommended question available")
+    return recommended_question
+
+@router.post("/", response_model=question_schema.Question)
 def create_question(question: question_schema.QuestionCreate, db: Session = Depends(get_db)):
     db_question = question_model.Question(content=question.content)
     db.add(db_question)
@@ -24,7 +35,7 @@ def create_question(question: question_schema.QuestionCreate, db: Session = Depe
     db.refresh(db_question)
     return db_question
 
-@router.get("", response_model=List[question_schema.Question])
+@router.get("/", response_model=List[question_schema.Question])
 def read_questions(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     questions = db.query(question_model.Question).offset(skip).limit(limit).all()
     return questions
@@ -54,17 +65,6 @@ def delete_question(question_id: int, db: Session = Depends(get_db)):
     db.delete(db_question)
     db.commit()
     return db_question
-
-@router.get("/daily", response_model=question_schema.Question)
-async def get_daily_question(user_id: int, db: Session = Depends(get_db)):
-    """
-    LLM을 연동하여 사용자에게 개인화된 '오늘의 질문'을 추천합니다.
-    """
-    recommended_question = await get_recommended_question(user_id)
-    if not recommended_question:
-        raise HTTPException(status_code=404, detail="No recommended question available")
-    return recommended_question
-
 
 @router.post("/answers", response_model=question_schema.Answer)
 async def create_answer(answer: question_schema.AnswerCreate, db: Session = Depends(get_db)):

@@ -1,9 +1,12 @@
 from fastapi import FastAPI
 from app.utils.db import engine, Base
 from app.api import question_router
+from app.config.config import Config
 
 def create_app():
     app = FastAPI()
+
+    app.config = Config()
 
     Base.metadata.create_all(bind=engine)
 

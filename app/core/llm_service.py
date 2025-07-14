@@ -2,10 +2,12 @@ import os
 from typing import Optional
 from openai import OpenAI
 
-from schemas import question_schema
+from app.schemas import question_schema
 
 # OpenAI API 키를 환경 변수에서 가져옵니다.
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+from app.config.config import Config
+
+OPENAI_API_KEY = Config.OPENAI_API_KEY
 
 async def get_recommended_question(user_id: int) -> Optional[question_schema.Question]:
     """

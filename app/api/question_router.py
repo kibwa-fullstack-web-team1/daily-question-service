@@ -1,13 +1,14 @@
 import os
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from app.schemas import question_schema
 from app.utils.db import get_db
 from app.config.config import Config
 from app.helper import question_helper
+from app.core.s3_service import S3Service
 
 router = APIRouter(
     prefix="/questions",
@@ -55,4 +56,21 @@ async def create_answer(answer: question_schema.AnswerCreate, db: Session = Depe
     db_answer, error_message = await question_helper.create_answer(db=db, answer=answer)
     if error_message:
         raise HTTPException(status_code=404, detail=error_message)
+    return db_answer
+
+@router.post("/voice-answers", response_model=question_schema.Answer)
+async def upload_voice_answer(
+    question_id: int = Form(...),
+    user_id: int = Form(...),
+    audio_file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    db_answer, error_message = await question_helper.upload_and_save_voice_answer(
+        db=db,
+        question_id=question_id,
+        user_id=user_id,
+        audio_file=audio_file
+    )
+    if error_message:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_message)
     return db_answer

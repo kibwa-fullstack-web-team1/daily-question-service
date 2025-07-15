@@ -10,7 +10,7 @@ def create_app():
 
     Base.metadata.create_all(bind=engine)
 
-    app.include_router(question_router.router)
+    app.include_router(question_router.router) # 프리픽스 제거
 
     @app.get("/")
     def read_root():

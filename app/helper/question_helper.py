@@ -138,4 +138,29 @@ async def upload_and_save_voice_answer(
     db_answer, error_message = await create_answer(db=db, answer=answer_create)
     if error_message:
         return None, error_message
+
+    # 음성 분석 서비스로 파일 전송 (KT1-36)
+    await send_voice_to_analysis_service(audio_file_url, user_id)
+
     return db_answer, None
+
+async def send_voice_to_analysis_service(audio_file_url: str, user_id: int):
+    """
+    음성 파일을 외부 분석 서비스로 전송합니다.
+    """
+    ANALYSIS_SERVICE_URL = "http://analyze-alarm-service:8002/analyze-voice" # analyze-alarm-service의 실제 엔드포인트로 변경 필요
+    
+    payload = {
+        "audio_file_url": audio_file_url,
+        "user_id": user_id
+    }
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(ANALYSIS_SERVICE_URL, json=payload)
+            response.raise_for_status() # 2xx 외의 응답은 예외 발생
+            print(f"음성 파일 분석 서비스 전송 성공: {response.json()}")
+        except httpx.RequestError as e:
+            print(f"음성 파일 분석 서비스 연결 오류: {e}")
+        except httpx.HTTPStatusError as e:
+            print(f"음성 파일 분석 서비스 응답 오류: {e.response.status_code} - {e.response.text}")

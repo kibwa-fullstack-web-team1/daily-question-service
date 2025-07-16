@@ -17,7 +17,7 @@ router = APIRouter(
 
 @router.get("/daily-questions", response_model=question_schema.Question)
 async def get_daily_question(user_id: int, db: Session = Depends(get_db)):
-    recommended_question = await question_helper.get_daily_question(user_id)
+    recommended_question = await question_helper.get_daily_question(user_id, db)
     if not recommended_question:
         raise HTTPException(status_code=404, detail="No recommended question available")
     return recommended_question

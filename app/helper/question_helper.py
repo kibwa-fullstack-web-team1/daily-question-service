@@ -73,6 +73,19 @@ async def create_answer(db: Session, answer: schemas.AnswerCreate):
     db.refresh(db_answer)
     return db_answer, None
 
+def get_answers_by_user(db: Session, user_id: int) -> List[schemas.Answer]:
+    return db.query(models.Answer).filter(models.Answer.user_id == user_id).all()
+
+def get_answer_by_id(db: Session, answer_id: int) -> Optional[schemas.Answer]:
+    return db.query(models.Answer).filter(models.Answer.id == answer_id).first()
+
+def delete_answer(db: Session, answer_id: int):
+    db_answer = db.query(models.Answer).filter(models.Answer.id == answer_id).first()
+    if db_answer:
+        db.delete(db_answer)
+        db.commit()
+    return db_answer
+
 async def upload_and_save_voice_answer(
     db: Session,
     question_id: int,

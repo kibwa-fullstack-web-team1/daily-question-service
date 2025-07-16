@@ -30,6 +30,11 @@ def create_question(question: question_schema.QuestionCreate, db: Session = Depe
 def read_questions(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return question_helper.read_questions(db=db, skip=skip, limit=limit)
 
+@router.get("/answers", response_model=List[question_schema.Answer])
+def get_answers_by_user(user_id: int, db: Session = Depends(get_db)):
+    answers = question_helper.get_answers_by_user(db=db, user_id=user_id)
+    return answers
+
 @router.get("/{question_id}", response_model=question_schema.Question)
 def read_question(question_id: int, db: Session = Depends(get_db)):
     question = question_helper.read_question(db=db, question_id=question_id)
@@ -51,11 +56,18 @@ def delete_question(question_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Question not found")
     return db_question
 
-@router.post("/answers", response_model=question_schema.Answer)
-async def create_answer(answer: question_schema.AnswerCreate, db: Session = Depends(get_db)):
-    db_answer, error_message = await question_helper.create_answer(db=db, answer=answer)
-    if error_message:
-        raise HTTPException(status_code=404, detail=error_message)
+@router.get("/answers/{answer_id}", response_model=question_schema.Answer)
+def get_answer_by_id(answer_id: int, db: Session = Depends(get_db)):
+    answer = question_helper.get_answer_by_id(db=db, answer_id=answer_id)
+    if answer is None:
+        raise HTTPException(status_code=404, detail="Answer not found")
+    return answer
+
+@router.delete("/answers/{answer_id}", response_model=question_schema.Answer)
+def delete_answer(answer_id: int, db: Session = Depends(get_db)):
+    db_answer = question_helper.delete_answer(db=db, answer_id=answer_id)
+    if db_answer is None:
+        raise HTTPException(status_code=404, detail="Answer not found")
     return db_answer
 
 @router.post("/voice-answers", response_model=question_schema.Answer)

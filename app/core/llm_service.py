@@ -46,3 +46,23 @@ async def get_recommended_question(user_id: int) -> Optional[question_schema.Que
             content="오늘 하루는 어떠셨나요?",
             created_at="2025-07-11T00:00:00.000000"
         )
+
+async def convert_voice_to_text(audio_file_path: str) -> str:
+    """
+    음성 파일을 텍스트로 변환합니다 (STT).
+    """
+    if not OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY 환경 변수가 설정되지 않았습니다.")
+
+    client = OpenAI(api_key=OPENAI_API_KEY)
+
+    try:
+        with open(audio_file_path, "rb") as audio_file:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1", 
+                file=audio_file
+            )
+        return transcript.text
+    except Exception as e:
+        print(f"음성-텍스트 변환 중 오류 발생: {e}")
+        raise

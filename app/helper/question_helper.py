@@ -40,8 +40,15 @@ def delete_question(db: Session, question_id: int):
         db.commit()
     return db_question
 
-async def get_daily_question(user_id: int) -> Optional[schemas.Question]:
-    return await get_recommended_question(user_id)
+async def get_daily_question(user_id: int, db: Session) -> Optional[schemas.Question]:
+    recommended_question = await get_recommended_question(user_id)
+    if recommended_question:
+        # LLM에서 받은 질문을 DB에 저장
+        db_question = create_question(db=db, question=schemas.QuestionCreate(content=recommended_question.content))
+        # LLM에서 받은 질문의 ID를 DB에 저장된 질문의 ID로 업데이트
+        recommended_question.id = db_question.id
+        recommended_question.created_at = db_question.created_at
+    return recommended_question
 
 async def create_answer(db: Session, answer: schemas.AnswerCreate):
     # 1. user-service를 호출하여 user_id 유효성 검증

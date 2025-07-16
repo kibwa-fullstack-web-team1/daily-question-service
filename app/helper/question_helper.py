@@ -1,10 +1,13 @@
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import httpx
+import os
+from fastapi import UploadFile # UploadFile 임포트
 
 from app import models, schemas
 from app.core.llm_service import get_recommended_question
 from app.config.config import Config
+from app.core.s3_service import S3Service # S3Service 임포트
 
 USER_SERVICE_URL = Config.USER_SERVICE_URL
 
@@ -67,4 +70,35 @@ async def create_answer(db: Session, answer: schemas.AnswerCreate):
     db.add(db_answer)
     db.commit()
     db.refresh(db_answer)
+    return db_answer, None
+
+async def upload_and_save_voice_answer(
+    db: Session,
+    question_id: int,
+    user_id: int,
+    audio_file: UploadFile
+):
+    s3_service = S3Service()
+
+    file_content = await audio_file.read()
+    file_extension = os.path.splitext(audio_file.filename)[1]
+    object_name = f"voice_answers/{user_id}_{question_id}_{os.urandom(4).hex()}{file_extension}"
+
+    # S3에 오디오 파일 업로드
+    if not s3_service.upload_file(file_content, object_name):
+        return None, "오디오 파일을 S3에 업로드하지 못했습니다."
+
+    audio_file_url = s3_service.get_file_url(object_name)
+    if not audio_file_url:
+        return None, "S3 파일 URL을 가져오지 못했습니다."
+
+    answer_create = schemas.AnswerCreate(
+        question_id=question_id,
+        user_id=user_id,
+        audio_file_url=audio_file_url,
+        text_content=None # STT 변환 결과는 다음 태스크에서 처리
+    )
+    db_answer, error_message = await create_answer(db=db, answer=answer_create)
+    if error_message:
+        return None, error_message
     return db_answer, None

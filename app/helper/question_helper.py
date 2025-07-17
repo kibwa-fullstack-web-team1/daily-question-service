@@ -3,9 +3,10 @@ from typing import List, Optional
 import httpx
 import os
 from fastapi import UploadFile # UploadFile 임포트
+import tempfile
 
 from app import models, schemas
-from app.core.llm_service import get_recommended_question
+from app.core.llm_service import get_recommended_question, convert_voice_to_text # convert_voice_to_text 임포트
 from app.config.config import Config
 from app.core.s3_service import S3Service # S3Service 임포트
 
@@ -39,8 +40,15 @@ def delete_question(db: Session, question_id: int):
         db.commit()
     return db_question
 
-async def get_daily_question(user_id: int) -> Optional[schemas.Question]:
-    return await get_recommended_question(user_id)
+async def get_daily_question(user_id: int, db: Session) -> Optional[schemas.Question]:
+    recommended_question = await get_recommended_question(user_id)
+    if recommended_question:
+        # LLM에서 받은 질문을 DB에 저장
+        db_question = create_question(db=db, question=schemas.QuestionCreate(content=recommended_question.content))
+        # LLM에서 받은 질문의 ID를 DB에 저장된 질문의 ID로 업데이트
+        recommended_question.id = db_question.id
+        recommended_question.created_at = db_question.created_at
+    return recommended_question
 
 async def create_answer(db: Session, answer: schemas.AnswerCreate):
     # 1. user-service를 호출하여 user_id 유효성 검증
@@ -72,6 +80,19 @@ async def create_answer(db: Session, answer: schemas.AnswerCreate):
     db.refresh(db_answer)
     return db_answer, None
 
+def get_answers_by_user(db: Session, user_id: int) -> List[schemas.Answer]:
+    return db.query(models.Answer).filter(models.Answer.user_id == user_id).all()
+
+def get_answer_by_id(db: Session, answer_id: int) -> Optional[schemas.Answer]:
+    return db.query(models.Answer).filter(models.Answer.id == answer_id).first()
+
+def delete_answer(db: Session, answer_id: int):
+    db_answer = db.query(models.Answer).filter(models.Answer.id == answer_id).first()
+    if db_answer:
+        db.delete(db_answer)
+        db.commit()
+    return db_answer
+
 async def upload_and_save_voice_answer(
     db: Session,
     question_id: int,
@@ -92,11 +113,27 @@ async def upload_and_save_voice_answer(
     if not audio_file_url:
         return None, "S3 파일 URL을 가져오지 못했습니다."
 
+    # S3에서 오디오 파일 다운로드 및 STT 변환
+    text_content = None
+    try:
+        # 임시 파일에 저장
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
+            tmp_file.write(file_content)
+            tmp_file_path = tmp_file.name
+
+        text_content = await convert_voice_to_text(tmp_file_path)
+    except Exception as e:
+        print(f"STT 변환 중 오류 발생: {e}")
+        # STT 변환 실패 시에도 S3 URL은 저장
+    finally:
+        if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):
+            os.remove(tmp_file_path) # 임시 파일 삭제
+
     answer_create = schemas.AnswerCreate(
         question_id=question_id,
         user_id=user_id,
         audio_file_url=audio_file_url,
-        text_content=None # STT 변환 결과는 다음 태스크에서 처리
+        text_content=text_content # STT 변환 결과 저장
     )
     db_answer, error_message = await create_answer(db=db, answer=answer_create)
     if error_message:

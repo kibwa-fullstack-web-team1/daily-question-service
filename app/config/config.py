@@ -5,6 +5,7 @@ class Config:
     DATABASE_URL = os.environ.get('DATABASE_URL')
     OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
     USER_SERVICE_URL = os.environ.get('USER_SERVICE_URL', 'http://localhost:8000')
+    VOICE_ANALYSIS_SERVICE_URL = os.environ.get('VOICE_ANALYSIS_SERVICE_URL', 'http://localhost:8003')
     
     # AWS S3 관련 환경 변수 추가
     AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')

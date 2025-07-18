@@ -77,6 +77,8 @@ async def get_recommended_question(user_id: int) -> Optional[question_schema.Que
             created_at="2025-07-11T00:00:00.000000"
         )
 
+VOICE_ANALYSIS_SERVICE_URL = Config.VOICE_ANALYSIS_SERVICE_URL # 음성 분석 서비스 URL
+
 async def convert_voice_to_text(audio_file_path: str) -> str:
     """
     음성 파일을 텍스트로 변환합니다 (STT).
@@ -96,3 +98,26 @@ async def convert_voice_to_text(audio_file_path: str) -> str:
     except Exception as e:
         print(f"음성-텍스트 변환 중 오류 발생: {e}")
         raise
+
+async def analyze_voice_with_service(s3_url: str) -> dict:
+    """
+    음성 분석 서비스에 S3 URL을 보내 음성 분석 결과를 받아옵니다.
+    """
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                f"{VOICE_ANALYSIS_SERVICE_URL}/api/analyze",
+                json={"s3_url": s3_url},
+                timeout=30.0
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            print(f"음성 분석 서비스 HTTP 오류 발생: {e.response.status_code} - {e.response.text}")
+            raise
+        except httpx.RequestError as e:
+            print(f"음성 분석 서비스 연결 오류 발생: {e}")
+            raise
+        except Exception as e:
+            print(f"음성 분석 서비스 호출 중 오류 발생: {e}")
+            raise

@@ -84,5 +84,11 @@ async def upload_voice_answer(
         audio_file=audio_file
     )
     if error_message:
+        print(f"Error message from helper: {error_message}") # Debugging line
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_message)
+    
+    # db_answer가 None일 경우 404 반환
+    if db_answer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Answer could not be created or found.")
+        
     return db_answer

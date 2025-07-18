@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, func, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, func, ForeignKey, Text, Float, JSON
 from sqlalchemy.orm import relationship
 from app.utils.db import Base
 
@@ -24,7 +24,9 @@ class Answer(Base):
     
     audio_file_url = Column(String, nullable=False) # S3에 저장된 음성 파일의 URL
     text_content = Column(Text, nullable=True) # STT 변환 결과
-    
+    cognitive_score = Column(Float, nullable=True) # 음성 분석 결과 - 인지 점수
+    analysis_details = Column(JSON, nullable=True) # 음성 분석 결과 - 상세 정보 (JSON)
+
     created_at = Column(DateTime, server_default=func.now())
 
     question = relationship("Question", back_populates="answers")

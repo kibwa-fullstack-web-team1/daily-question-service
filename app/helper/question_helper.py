@@ -6,7 +6,7 @@ from fastapi import UploadFile # UploadFile 임포트
 import tempfile
 
 from app import models, schemas
-from app.core.llm_service import get_recommended_question, convert_voice_to_text # convert_voice_to_text 임포트
+from app.core.llm_service import get_recommended_question, convert_voice_to_text, analyze_voice_with_service # convert_voice_to_text, analyze_voice_with_service 임포트
 from app.config.config import Config
 from app.core.s3_service import S3Service # S3Service 임포트
 
@@ -73,7 +73,9 @@ async def create_answer(db: Session, answer: schemas.AnswerCreate):
         question_id=answer.question_id,
         user_id=answer.user_id,
         audio_file_url=answer.audio_file_url,
-        text_content=answer.text_content
+        text_content=answer.text_content,
+        cognitive_score=answer.cognitive_score,
+        analysis_details=answer.analysis_details
     )
     db.add(db_answer)
     db.commit()
@@ -106,36 +108,62 @@ async def upload_and_save_voice_answer(
     object_name = f"voice_answers/{user_id}_{question_id}_{os.urandom(4).hex()}{file_extension}"
 
     # S3에 오디오 파일 업로드
+    print(f"Attempting S3 upload for object: {object_name}")
     if not s3_service.upload_file(file_content, object_name):
+        print("S3 upload failed.")
         return None, "오디오 파일을 S3에 업로드하지 못했습니다."
+    print("S3 upload successful.")
 
     audio_file_url = s3_service.get_file_url(object_name)
     if not audio_file_url:
+        print("Failed to get S3 file URL.")
         return None, "S3 파일 URL을 가져오지 못했습니다."
+    print(f"S3 file URL: {audio_file_url}")
 
     # S3에서 오디오 파일 다운로드 및 STT 변환
     text_content = None
+    tmp_file_path = None
     try:
         # 임시 파일에 저장
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
             tmp_file.write(file_content)
             tmp_file_path = tmp_file.name
+        print(f"Temporary audio file saved to: {tmp_file_path}")
 
         text_content = await convert_voice_to_text(tmp_file_path)
+        print(f"STT conversion successful. Text: {text_content}")
     except Exception as e:
         print(f"STT 변환 중 오류 발생: {e}")
         # STT 변환 실패 시에도 S3 URL은 저장
     finally:
-        if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):
+        if tmp_file_path and os.path.exists(tmp_file_path):
             os.remove(tmp_file_path) # 임시 파일 삭제
+            print(f"Temporary file removed: {tmp_file_path}")
+
+    # 음성 분석 서비스 호출
+    cognitive_score = None
+    analysis_details = None
+    try:
+        print(f"Calling voice analysis service for URL: {audio_file_url}")
+        analysis_result = await analyze_voice_with_service(audio_file_url)
+        cognitive_score = analysis_result.get("cognitive_score")
+        analysis_details = analysis_result.get("details")
+        print(f"Voice analysis successful. Score: {cognitive_score}, Details: {analysis_details}")
+    except Exception as e:
+        print(f"음성 분석 서비스 호출 중 오류 발생: {e}")
+        # 분석 실패 시에도 답변은 저장
 
     answer_create = schemas.AnswerCreate(
         question_id=question_id,
         user_id=user_id,
         audio_file_url=audio_file_url,
-        text_content=text_content # STT 변환 결과 저장
+        text_content=text_content, # STT 변환 결과 저장
+        cognitive_score=cognitive_score, # 인지 점수 저장
+        analysis_details=analysis_details # 분석 상세 정보 저장
     )
+    print(f"Attempting to create answer with data: {answer_create.model_dump_json()}")
     db_answer, error_message = await create_answer(db=db, answer=answer_create)
+    print(f"create_answer returned: db_answer={db_answer}, error_message={error_message}")
     if error_message:
         return None, error_message
     return db_answer, None

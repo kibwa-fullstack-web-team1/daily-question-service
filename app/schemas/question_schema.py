@@ -24,11 +24,15 @@ class AnswerBase(BaseModel):
 class AnswerCreate(AnswerBase):
     question_id: int
     user_id: int
+    cognitive_score: Optional[float] = None
+    analysis_details: Optional[dict] = None
 
 class Answer(AnswerBase):
     id: int
     question_id: int
     user_id: int
+    cognitive_score: Optional[float] = None
+    analysis_details: Optional[dict] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

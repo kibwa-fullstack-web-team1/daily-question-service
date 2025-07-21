@@ -43,8 +43,14 @@ def delete_question(db: Session, question_id: int):
 async def get_daily_question(user_id: int, db: Session) -> Optional[schemas.Question]:
     recommended_question = await get_recommended_question(user_id)
     if recommended_question:
-        # LLM에서 받은 질문을 DB에 저장
-        db_question = create_question(db=db, question=schemas.QuestionCreate(content=recommended_question.content))
+        # LLM에서 받은 질문과 예상 답변을 DB에 저장
+        db_question = models.Question(
+            content=recommended_question.content,
+            expected_answers=recommended_question.expected_answers
+        )
+        db.add(db_question)
+        db.commit()
+        db.refresh(db_question)
         # LLM에서 받은 질문의 ID를 DB에 저장된 질문의 ID로 업데이트
         recommended_question.id = db_question.id
         recommended_question.created_at = db_question.created_at

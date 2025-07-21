@@ -6,14 +6,15 @@ from fastapi import UploadFile # UploadFile 임포트
 import tempfile
 
 from app import models, schemas
-from app.core.llm_service import get_recommended_question, convert_voice_to_text, analyze_voice_with_service # convert_voice_to_text, analyze_voice_with_service 임포트
+from app.core.llm_service import get_recommended_question, convert_voice_to_text, analyze_voice_with_service, get_embedding
 from app.config.config import Config
-from app.core.s3_service import S3Service # S3Service 임포트
+from app.core.s3_service import S3Service
+from app.utils.functions import cosine_similarity
 
 USER_SERVICE_URL = Config.USER_SERVICE_URL
 
 def create_question(db: Session, question: schemas.QuestionCreate):
-    db_question = models.Question(content=question.content)
+    db_question = models.Question(content=question.content, expected_answers=question.expected_answers)
     db.add(db_question)
     db.commit()
     db.refresh(db_question)
@@ -29,6 +30,7 @@ def update_question(db: Session, question_id: int, question: schemas.QuestionCre
     db_question = db.query(models.Question).filter(models.Question.id == question_id).first()
     if db_question:
         db_question.content = question.content
+        db_question.expected_answers = question.expected_answers
         db.commit()
         db.refresh(db_question)
     return db_question
@@ -81,7 +83,8 @@ async def create_answer(db: Session, answer: schemas.AnswerCreate):
         audio_file_url=answer.audio_file_url,
         text_content=answer.text_content,
         cognitive_score=answer.cognitive_score,
-        analysis_details=answer.analysis_details
+        analysis_details=answer.analysis_details,
+        semantic_score=answer.semantic_score # semantic_score 추가
     )
     db.add(db_answer)
     db.commit()
@@ -159,13 +162,31 @@ async def upload_and_save_voice_answer(
         print(f"음성 분석 서비스 호출 중 오류 발생: {e}")
         # 분석 실패 시에도 답변은 저장
 
+    # 의미 유사도 점수 계산
+    semantic_score = None
+    if text_content and question_id:
+        question = db.query(models.Question).filter(models.Question.id == question_id).first()
+        if question and question.expected_answers:
+            user_answer_embedding = await get_embedding(text_content)
+            if user_answer_embedding:
+                max_similarity = 0.0
+                for expected_ans in question.expected_answers:
+                    expected_ans_embedding = await get_embedding(expected_ans)
+                    if expected_ans_embedding:
+                        similarity = cosine_similarity(user_answer_embedding, expected_ans_embedding)
+                        if similarity > max_similarity:
+                            max_similarity = similarity
+                semantic_score = round(max_similarity * 100, 2) # 0-100 스케일로 변환
+                print(f"Semantic similarity score: {semantic_score}")
+
     answer_create = schemas.AnswerCreate(
         question_id=question_id,
         user_id=user_id,
         audio_file_url=audio_file_url,
         text_content=text_content, # STT 변환 결과 저장
         cognitive_score=cognitive_score, # 인지 점수 저장
-        analysis_details=analysis_details # 분석 상세 정보 저장
+        analysis_details=analysis_details, # 분석 상세 정보 저장
+        semantic_score=semantic_score # 의미 유사도 점수 저장
     )
     print(f"Attempting to create answer with data: {answer_create.model_dump_json()}")
     db_answer, error_message = await create_answer(db=db, answer=answer_create)

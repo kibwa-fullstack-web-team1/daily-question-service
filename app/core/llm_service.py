@@ -49,24 +49,45 @@ async def get_recommended_question(user_id: int) -> Optional[question_schema.Que
 세부 내용:
 {segments_text}
 
-이 이야기를 바탕으로 사용자에게 오늘 하루를 돌아볼 수 있는 개인화된 질문 하나를 추천해 주세요. 질문만 간결하게 답변해주세요.
+이 이야기를 바탕으로 사용자에게 오늘 하루를 돌아볼 수 있는 개인화된 질문 하나를 추천해 주세요. 질문과 함께 3~5개의 간결한 예상 모범 답변 리스트를 JSON 형식으로 반환해 주세요.
+JSON 형식:
+{
+  "question": "string",
+  "expected_answers": ["answer1", "answer2", "answer3"]
+}
 """
 
     try:
         chat_completion = client.chat.completions.create(
             model="gpt-3.5-turbo",
+            response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": "당신은 사용자에게 개인화된 질문을 추천해주는 친절한 AI입니다."}, 
+                {"role": "system", "content": "당신은 사용자에게 개인화된 질문과 그에 대한 예상 답변을 JSON 형식으로 추천해주는 친절한 AI입니다."}, 
                 {"role": "user", "content": prompt}
             ]
         )
-        question_content = chat_completion.choices[0].message.content.strip()
+        
+        response_content = chat_completion.choices[0].message.content.strip()
+        import json
+        response_json = json.loads(response_content)
+        
+        question_content = response_json.get("question", "오늘 하루는 어떠셨나요?")
+        expected_answers = response_json.get("expected_answers", [])
 
         # 임시 ID와 생성 시간 사용 (실제 DB 저장 시에는 DB에서 할당)
         return question_schema.Question(
             id=0, # 임시 ID, 실제 DB 저장 시에는 DB에서 할당
             content=question_content,
+            expected_answers=expected_answers, # 예상 답변 추가
             created_at="2025-07-11T00:00:00.000000" # 임시 시간
+        )
+    except json.JSONDecodeError as e:
+        print(f"JSON 디코딩 오류 발생: {e}")
+        return question_schema.Question(
+            id=0, 
+            content="오늘 하루는 어떠셨나요?",
+            expected_answers=[],
+            created_at="2025-07-11T00:00:00.000000"
         )
     except Exception as e:
         print(f"OpenAI API 호출 중 오류 발생: {e}")
@@ -74,6 +95,7 @@ async def get_recommended_question(user_id: int) -> Optional[question_schema.Que
         return question_schema.Question(
             id=0, 
             content="오늘 하루는 어떠셨나요?",
+            expected_answers=[],
             created_at="2025-07-11T00:00:00.000000"
         )
 

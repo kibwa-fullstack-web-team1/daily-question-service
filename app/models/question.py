@@ -27,6 +27,7 @@ class Answer(Base):
     text_content = Column(Text, nullable=True) # STT 변환 결과
     cognitive_score = Column(Float, nullable=True) # 음성 분석 결과 - 인지 점수
     analysis_details = Column(JSON, nullable=True) # 음성 분석 결과 - 상세 정보 (JSON)
+    semantic_score = Column(Float, nullable=True) # 의미 유사도 점수
 
     created_at = Column(DateTime, server_default=func.now())
 

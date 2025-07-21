@@ -20,6 +20,15 @@ async def get_recommended_question(user_id: int) -> Optional[question_schema.Que
 
     client = OpenAI(api_key=OPENAI_API_KEY)
 
+    base_prompt = f"사용자 {user_id}에게 오늘 하루를 돌아볼 수 있는 질문 하나를 추천해 주세요."
+    json_format_instruction = """
+JSON 형식:
+{
+  "question": "string",
+  "expected_answers": ["answer1", "answer2", "answer3"]
+}
+"""
+
     # 스토리 서비스에서 사용자 스토리 가져오기
     story_data = None
     async with httpx.AsyncClient() as http_client:
@@ -35,24 +44,7 @@ async def get_recommended_question(user_id: int) -> Optional[question_schema.Que
         except Exception as e:
             print(f"스토리 데이터 처리 중 오류 발생: {e}")
 
-    prompt = f"사용자 {user_id}에게 오늘 하루를 돌아볼 수 있는 질문 하나를 추천해 주세요. 질문만 간결하게 답변해주세요."
-
-    if story_data:
-        story_content = story_data.get("content", "")
-        story_segments = story_data.get("segments", [])
-        
-        segments_text = "\n".join([s.get("segment_text", "") for s in story_segments])
-
-        base_prompt = f"사용자 {user_id}에게 오늘 하루를 돌아볼 수 있는 질문 하나를 추천해 주세요."
-    json_format_instruction = """
-JSON 형식:
-{
-  "question": "string",
-  "expected_answers": ["answer1", "answer2", "answer3"]
-}
-"""
-
-    prompt = "" # prompt 변수 초기화
+    prompt = ""
     if story_data:
         story_content = story_data.get("content", "")
         story_segments = story_data.get("segments", [])

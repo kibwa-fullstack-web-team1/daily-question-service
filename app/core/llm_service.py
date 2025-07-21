@@ -43,13 +43,8 @@ async def get_recommended_question(user_id: int) -> Optional[question_schema.Que
         
         segments_text = "\n".join([s.get("segment_text", "") for s in story_segments])
 
-        prompt = f"""사용자 {user_id}의 최근 이야기입니다:
-제목: {story_data.get("title", "")}
-내용: {story_content}
-세부 내용:
-{segments_text}
-
-이 이야기를 바탕으로 사용자에게 오늘 하루를 돌아볼 수 있는 개인화된 질문 하나를 추천해 주세요. 질문과 함께 3~5개의 간결한 예상 모범 답변 리스트를 JSON 형식으로 반환해 주세요.
+        base_prompt = f"사용자 {user_id}에게 오늘 하루를 돌아볼 수 있는 질문 하나를 추천해 주세요."
+    json_format_instruction = """
 JSON 형식:
 {
   "question": "string",
@@ -57,12 +52,31 @@ JSON 형식:
 }
 """
 
+    if story_data:
+        story_content = story_data.get("content", "")
+        story_segments = story_data.get("segments", [])
+        segments_text = "\n".join([s.get("segment_text", "") for s in story_segments])
+
+        prompt = f"""{base_prompt}
+이 이야기를 바탕으로 개인화된 질문과 그에 대한 3개의 간결한 예상 모범 답변 리스트를 JSON 형식으로 반환해 주세요.
+사용자 {user_id}의 최근 이야기입니다:
+제목: {story_data.get("title", "")}
+내용: {story_content}
+세부 내용:
+{segments_text}
+{json_format_instruction}"""
+    else:
+        # If no story data, ask for a generic question and generic expected answers.
+        prompt = f"""{base_prompt}
+질문과 함께 3개의 간결한 예상 모범 답변 리스트를 JSON 형식으로 반환해 주세요.
+{json_format_instruction}"""
+
     try:
         chat_completion = client.chat.completions.create(
             model="gpt-3.5-turbo",
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": "당신은 사용자에게 개인화된 질문과 그에 대한 예상 답변을 JSON 형식으로 추천해주는 친절한 AI입니다."}, 
+                {"role": "system", "content": "당신은 사용자에게 개인화된 질문과 그에 대한 예상 답변을 JSON 형식으로 추천해주는 친절한 AI입니다."},
                 {"role": "user", "content": prompt}
             ]
         )
@@ -84,7 +98,7 @@ JSON 형식:
     except json.JSONDecodeError as e:
         print(f"JSON 디코딩 오류 발생: {e}")
         return question_schema.Question(
-            id=0, 
+            id=0,
             content="오늘 하루는 어떠셨나요?",
             expected_answers=[],
             created_at="2025-07-11T00:00:00.000000"
@@ -93,7 +107,7 @@ JSON 형식:
         print(f"OpenAI API 호출 중 오류 발생: {e}")
         # 오류 발생 시 기본 질문 반환 또는 예외 처리
         return question_schema.Question(
-            id=0, 
+            id=0,
             content="오늘 하루는 어떠셨나요?",
             expected_answers=[],
             created_at="2025-07-11T00:00:00.000000"

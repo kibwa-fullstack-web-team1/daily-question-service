@@ -3,8 +3,11 @@ from typing import Optional
 from datetime import datetime
 
 # Question 스키마
+from typing import List
+
 class QuestionBase(BaseModel):
     content: str
+    expected_answers: Optional[List[str]] = None
 
 class QuestionCreate(QuestionBase):
     pass

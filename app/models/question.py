@@ -7,6 +7,7 @@ class Question(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text, nullable=False)
+    expected_answers = Column(JSON, nullable=True) # LLM이 생성한 예상 답변 목록
     created_at = Column(DateTime, server_default=func.now())
 
     answers = relationship("Answer", back_populates="question")

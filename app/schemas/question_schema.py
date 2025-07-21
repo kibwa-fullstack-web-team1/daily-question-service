@@ -37,6 +37,7 @@ class Answer(AnswerBase):
     user_id: int
     cognitive_score: Optional[float] = None
     analysis_details: Optional[dict] = None
+    semantic_score: Optional[float] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

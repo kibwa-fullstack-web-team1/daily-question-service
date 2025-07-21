@@ -175,7 +175,7 @@ async def upload_and_save_voice_answer(
                         similarity = cosine_similarity(user_answer_embedding, expected_ans_embedding)
                         if similarity > max_similarity:
                             max_similarity = similarity
-                semantic_score = round(max_similarity * 100, 2) # 0-100 스케일로 변환
+                semantic_score = round((max_similarity + 1) / 2 * 100, 2) # -1~1 스케일을 0~100 스케일로 변환
                 print(f"Semantic similarity score: {semantic_score}")
 
     answer_create = schemas.AnswerCreate(

@@ -52,7 +52,7 @@ JSON 형식:
 }
 """
 
-    prompt = ""
+    prompt = "" # prompt 변수 초기화
     if story_data:
         story_content = story_data.get("content", "")
         story_segments = story_data.get("segments", [])

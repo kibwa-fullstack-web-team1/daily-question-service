@@ -52,6 +52,7 @@ JSON 형식:
 }
 """
 
+    prompt = ""
     if story_data:
         story_content = story_data.get("content", "")
         story_segments = story_data.get("segments", [])

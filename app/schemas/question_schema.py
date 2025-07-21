@@ -29,6 +29,7 @@ class AnswerCreate(AnswerBase):
     user_id: int
     cognitive_score: Optional[float] = None
     analysis_details: Optional[dict] = None
+    semantic_score: Optional[float] = None
 
 class Answer(AnswerBase):
     id: int

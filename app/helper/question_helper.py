@@ -83,8 +83,7 @@ async def create_answer(db: Session, answer: schemas.AnswerCreate):
         audio_file_url=answer.audio_file_url,
         text_content=answer.text_content,
         cognitive_score=answer.cognitive_score,
-        analysis_details=answer.analysis_details,
-        semantic_score=answer.semantic_score # semantic_score 추가
+        analysis_details=answer.analysis_details
     )
     db.add(db_answer)
     db.commit()

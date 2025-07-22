@@ -9,7 +9,7 @@ from app import models, schemas
 from app.core.llm_service import get_recommended_question, convert_voice_to_text, analyze_voice_with_service, get_embedding
 from app.config.config import Config
 from app.core.s3_service import S3Service
-from app.utils.functions import cosine_similarity
+from app.utils.functions import cosine_similarity, sigmoid_mapping
 
 USER_SERVICE_URL = Config.USER_SERVICE_URL
 
@@ -182,8 +182,14 @@ async def upload_and_save_voice_answer(
                     top_n_similarities = similarities[:3] # 상위 3개 선택
                     average_similarity = sum(top_n_similarities) / len(top_n_similarities)
                     semantic_score = round((average_similarity + 1) / 2 * 100, 2) # -1~1 스케일을 0~100 스케일로 변환
+                    
+                    # 시그모이드 매핑 적용
+                    mapped_semantic_score = sigmoid_mapping(semantic_score, k=0.1, x0=50.0)
+                    semantic_score = round(mapped_semantic_score, 2)
+
                     print(f"Semantic similarity scores: {similarities}")
-                    print(f"Top 3 average semantic similarity score: {semantic_score}")
+                    print(f"Top 3 average semantic similarity score (before sigmoid): {round((average_similarity + 1) / 2 * 100, 2)}")
+                    print(f"Mapped semantic score (after sigmoid): {semantic_score}")
 
     answer_create = schemas.AnswerCreate(
         question_id=question_id,

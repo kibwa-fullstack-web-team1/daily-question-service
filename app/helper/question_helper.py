@@ -167,11 +167,11 @@ async def upload_and_save_voice_answer(
     if text_content and question_id:
         question = db.query(models.Question).filter(models.Question.id == question_id).first()
         if question and question.expected_answers:
-            user_answer_embedding = await get_embedding(text_content)
+            user_answer_embedding = await get_embedding(text_content, dimensions=1024)
             if user_answer_embedding:
                 max_similarity = 0.0
                 for expected_ans in question.expected_answers:
-                    expected_ans_embedding = await get_embedding(expected_ans)
+                    expected_ans_embedding = await get_embedding(expected_ans, dimensions=1024)
                     if expected_ans_embedding:
                         similarity = cosine_similarity(user_answer_embedding, expected_ans_embedding)
                         if similarity > max_similarity:

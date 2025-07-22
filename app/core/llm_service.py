@@ -11,18 +11,22 @@ from app.config.config import Config
 OPENAI_API_KEY = Config.OPENAI_API_KEY
 STORY_SERVICE_URL = "http://localhost:8011" # 스토리 서비스 URL (현재 개발 중, 추후 API 호출 가능하다고 가정)
 
-async def get_embedding(text: str) -> List[float]:
+async def get_embedding(text: str, dimensions: int = 1024) -> List[float]:
     """
     OpenAI Embeddings API를 호출하여 텍스트의 임베딩 벡터를 반환합니다.
+    MRL(Matryoshka Representation Learning)을 활용하여 임베딩 차원을 조절할 수 있습니다.
     """
     if not OPENAI_API_KEY:
         raise ValueError("OPENAI_API_KEY 환경 변수가 설정되지 않았습니다.")
 
     client = OpenAI(api_key=OPENAI_API_KEY)
+    model = "text-embedding-3-large"
     try:
+        print(f"Creating embedding with model: {model} and dimensions: {dimensions}")
         response = client.embeddings.create(
             input=text,
-            model="text-embedding-3-small"
+            model=model,
+            dimensions=dimensions
         )
         return response.data[0].embedding
     except Exception as e:

@@ -166,30 +166,40 @@ async def upload_and_save_voice_answer(
     semantic_score = None
     if text_content and question_id:
         question = db.query(models.Question).filter(models.Question.id == question_id).first()
-        if question and question.expected_answers:
+        if question and question.content:
+            question_embedding = await get_embedding(question.content, dimensions=1024)
             user_answer_embedding = await get_embedding(text_content, dimensions=1024)
-            if user_answer_embedding:
-                similarities = []
-                for expected_ans in question.expected_answers:
-                    expected_ans_embedding = await get_embedding(expected_ans, dimensions=1024)
-                    if expected_ans_embedding:
-                        similarity = cosine_similarity(user_answer_embedding, expected_ans_embedding)
-                        similarities.append(similarity)
-                
-                if similarities:
-                    # 유사도 점수를 내림차순으로 정렬하고 상위 3개의 평균을 계산
-                    similarities.sort(reverse=True)
-                    top_n_similarities = similarities[:3] # 상위 3개 선택
-                    average_similarity = sum(top_n_similarities) / len(top_n_similarities)
-                    semantic_score = round((average_similarity + 1) / 2 * 100, 2) # -1~1 스케일을 0~100 스케일로 변환
-                    
-                    # 시그모이드 매핑 적용
-                    mapped_semantic_score = sigmoid_mapping(semantic_score, k=0.1, x0=50.0)
-                    semantic_score = round(mapped_semantic_score, 2)
 
-                    print(f"Semantic similarity scores: {similarities}")
-                    print(f"Top 3 average semantic similarity score (before sigmoid): {round((average_similarity + 1) / 2 * 100, 2)}")
-                    print(f"Mapped semantic score (after sigmoid): {semantic_score}")
+            if question_embedding and user_answer_embedding:
+                relevance_similarity = cosine_similarity(user_answer_embedding, question_embedding)
+                print(f"Relevance similarity between user answer and question: {relevance_similarity}")
+
+                # 관련성 게이트: 유사도 임계값 이하일 경우 semantic_score를 0으로 설정
+                if relevance_similarity < 0.2: # 임계값 설정 (조정 가능)
+                    semantic_score = 0.0
+                    print(f"Relevance gate activated: semantic_score set to {semantic_score}")
+                else:
+                    similarities = []
+                    for expected_ans in question.expected_answers:
+                        expected_ans_embedding = await get_embedding(expected_ans, dimensions=1024)
+                        if expected_ans_embedding:
+                            similarity = cosine_similarity(user_answer_embedding, expected_ans_embedding)
+                            similarities.append(similarity)
+                    
+                    if similarities:
+                        # 유사도 점수를 내림차순으로 정렬하고 상위 3개의 평균을 계산
+                        similarities.sort(reverse=True)
+                        top_n_similarities = similarities[:3] # 상위 3개 선택
+                        average_similarity = sum(top_n_similarities) / len(top_n_similarities)
+                        semantic_score = round((average_similarity + 1) / 2 * 100, 2) # -1~1 스케일을 0~100 스케일로 변환
+                        
+                        # 시그모이드 매핑 적용
+                        mapped_semantic_score = sigmoid_mapping(semantic_score, k=0.1, x0=50.0)
+                        semantic_score = round(mapped_semantic_score, 2)
+
+                        print(f"Semantic similarity scores: {similarities}")
+                        print(f"Top 3 average semantic similarity score (before sigmoid): {round((average_similarity + 1) / 2 * 100, 2)}")
+                        print(f"Mapped semantic score (after sigmoid): {semantic_score}")
 
     answer_create = schemas.AnswerCreate(
         question_id=question_id,

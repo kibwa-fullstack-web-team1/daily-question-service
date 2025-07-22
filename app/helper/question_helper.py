@@ -169,15 +169,21 @@ async def upload_and_save_voice_answer(
         if question and question.expected_answers:
             user_answer_embedding = await get_embedding(text_content, dimensions=1024)
             if user_answer_embedding:
-                max_similarity = 0.0
+                similarities = []
                 for expected_ans in question.expected_answers:
                     expected_ans_embedding = await get_embedding(expected_ans, dimensions=1024)
                     if expected_ans_embedding:
                         similarity = cosine_similarity(user_answer_embedding, expected_ans_embedding)
-                        if similarity > max_similarity:
-                            max_similarity = similarity
-                semantic_score = round((max_similarity + 1) / 2 * 100, 2) # -1~1 스케일을 0~100 스케일로 변환
-                print(f"Semantic similarity score: {semantic_score}")
+                        similarities.append(similarity)
+                
+                if similarities:
+                    # 유사도 점수를 내림차순으로 정렬하고 상위 3개의 평균을 계산
+                    similarities.sort(reverse=True)
+                    top_n_similarities = similarities[:3] # 상위 3개 선택
+                    average_similarity = sum(top_n_similarities) / len(top_n_similarities)
+                    semantic_score = round((average_similarity + 1) / 2 * 100, 2) # -1~1 스케일을 0~100 스케일로 변환
+                    print(f"Semantic similarity scores: {similarities}")
+                    print(f"Top 3 average semantic similarity score: {semantic_score}")
 
     answer_create = schemas.AnswerCreate(
         question_id=question_id,

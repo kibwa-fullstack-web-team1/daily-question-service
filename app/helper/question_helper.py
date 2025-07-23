@@ -4,11 +4,13 @@ import httpx
 import os
 from fastapi import UploadFile # UploadFile 임포트
 import tempfile
+import datetime # datetime 모듈 임포트
 
 from app import models, schemas
 from app.core.llm_service import get_recommended_question, convert_voice_to_text, analyze_voice_with_service, get_embedding
 from app.config.config import Config
 from app.core.s3_service import S3Service
+from app.core.kafka_producer_service import publish_score_update # publish_score_update 함수 임포트
 from app.utils.functions import cosine_similarity, sigmoid_mapping
 
 USER_SERVICE_URL = Config.USER_SERVICE_URL
@@ -35,12 +37,12 @@ def update_question(db: Session, question_id: int, question: schemas.QuestionCre
         db.refresh(db_question)
     return db_question
 
-def delete_question(db: Session, question_id: int):
-    db_question = db.query(models.Question).filter(models.Question.id == question_id).first()
-    if db_question:
-        db.delete(db_question)
+def delete_question(db: Session, answer_id: int):
+    db_answer = db.query(models.Answer).filter(models.Answer.id == answer_id).first()
+    if db_answer:
+        db.delete(db_answer)
         db.commit()
-    return db_question
+    return db_answer
 
 async def get_daily_question(user_id: int, db: Session) -> Optional[schemas.Question]:
     recommended_question = await get_recommended_question(user_id)
@@ -215,4 +217,16 @@ async def upload_and_save_voice_answer(
     print(f"create_answer returned: db_answer={db_answer}, error_message={error_message}")
     if error_message:
         return None, error_message
+
+    # Kafka 메시지 발행
+    if cognitive_score is not None and semantic_score is not None:
+        current_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        publish_score_update(
+            user_id=str(user_id),
+            answer_id=str(db_answer.id) if db_answer else "", # db_answer가 None일 경우 빈 문자열
+            cognitive_score=cognitive_score,
+            semantic_score=semantic_score,
+            timestamp=current_timestamp
+        )
+
     return db_answer, None

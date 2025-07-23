@@ -11,50 +11,19 @@ from app.core.llm_service import get_recommended_question, convert_voice_to_text
 from app.config.config import Config
 from app.core.s3_service import S3Service
 from app.core.kafka_producer_service import publish_score_update # publish_score_update 함수 임포트
+from app.core import crud_service # crud_service 임포트
 from app.utils.functions import cosine_similarity, sigmoid_mapping
 
 USER_SERVICE_URL = Config.USER_SERVICE_URL
 
-def create_question(db: Session, question: schemas.QuestionCreate):
-    db_question = models.Question(content=question.content, expected_answers=question.expected_answers)
-    db.add(db_question)
-    db.commit()
-    db.refresh(db_question)
-    return db_question
-
-def read_questions(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Question).offset(skip).limit(limit).all()
-
-def read_question(db: Session, question_id: int):
-    return db.query(models.Question).filter(models.Question.id == question_id).first()
-
-def update_question(db: Session, question_id: int, question: schemas.QuestionCreate):
-    db_question = db.query(models.Question).filter(models.Question.id == question_id).first()
-    if db_question:
-        db_question.content = question.content
-        db_question.expected_answers = question.expected_answers
-        db.commit()
-        db.refresh(db_question)
-    return db_question
-
-def delete_question(db: Session, answer_id: int):
-    db_answer = db.query(models.Answer).filter(models.Answer.id == answer_id).first()
-    if db_answer:
-        db.delete(db_answer)
-        db.commit()
-    return db_answer
+# 기존 create_question, read_questions, read_question, update_question, delete_question 함수는 crud_service로 이동했으므로 제거
+# 기존 get_answers_by_user, get_answer_by_id, delete_answer 함수는 crud_service로 이동했으므로 제거
 
 async def get_daily_question(user_id: int, db: Session) -> Optional[schemas.Question]:
     recommended_question = await get_recommended_question(user_id)
     if recommended_question:
         # LLM에서 받은 질문과 예상 답변을 DB에 저장
-        db_question = models.Question(
-            content=recommended_question.content,
-            expected_answers=recommended_question.expected_answers
-        )
-        db.add(db_question)
-        db.commit()
-        db.refresh(db_question)
+        db_question = crud_service.create_question(db=db, question=recommended_question) # crud_service.create_question 사용
         # LLM에서 받은 질문의 ID를 DB에 저장된 질문의 ID로 업데이트
         recommended_question.id = db_question.id
         recommended_question.created_at = db_question.created_at
@@ -74,37 +43,13 @@ async def create_answer(db: Session, answer: schemas.AnswerCreate):
             return None, f"Could not connect to user service: {e}"
 
     # 2. question_id 유효성 검증 (daily-question-service 내에서)
-    question = db.query(models.Question).filter(models.Question.id == answer.question_id).first()
+    question = crud_service.read_question(db=db, question_id=answer.question_id) # crud_service.read_question 사용
     if not question:
         return None, f"Question with ID {answer.question_id} not found"
 
-    # 3. 답변 저장
-    db_answer = models.Answer(
-        question_id=answer.question_id,
-        user_id=answer.user_id,
-        audio_file_url=answer.audio_file_url,
-        text_content=answer.text_content,
-        cognitive_score=answer.cognitive_score,
-        analysis_details=answer.analysis_details,
-        semantic_score=answer.semantic_score # semantic_score 추가
-    )
-    db.add(db_answer)
-    db.commit()
-    db.refresh(db_answer)
+    # 3. 답변 저장 (crud_service의 create_answer_db 사용)
+    db_answer = crud_service.create_answer_db(db=db, answer=answer)
     return db_answer, None
-
-def get_answers_by_user(db: Session, user_id: int) -> List[schemas.Answer]:
-    return db.query(models.Answer).filter(models.Answer.user_id == user_id).all()
-
-def get_answer_by_id(db: Session, answer_id: int) -> Optional[schemas.Answer]:
-    return db.query(models.Answer).filter(models.Answer.id == answer_id).first()
-
-def delete_answer(db: Session, answer_id: int):
-    db_answer = db.query(models.Answer).filter(models.Answer.id == answer_id).first()
-    if db_answer:
-        db.delete(db_answer)
-        db.commit()
-    return db_answer
 
 async def upload_and_save_voice_answer(
     db: Session,
@@ -167,7 +112,7 @@ async def upload_and_save_voice_answer(
     # 의미 유사도 점수 계산
     semantic_score = None
     if text_content and question_id:
-        question = db.query(models.Question).filter(models.Question.id == question_id).first()
+        question = crud_service.read_question(db=db, question_id=question_id) # crud_service.read_question 사용
         if question and question.content:
             question_embedding = await get_embedding(question.content, dimensions=1024)
             user_answer_embedding = await get_embedding(text_content, dimensions=1024)

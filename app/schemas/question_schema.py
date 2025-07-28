@@ -39,6 +39,7 @@ class Answer(AnswerBase):
     analysis_details: Optional[dict] = None
     semantic_score: Optional[float] = None
     created_at: datetime
+    question_content: Optional[str] = None # 추가
 
     model_config = ConfigDict(from_attributes=True)
 

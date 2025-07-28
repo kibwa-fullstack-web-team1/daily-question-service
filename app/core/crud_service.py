@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from typing import List, Optional
+import datetime
 
 from app import models, schemas
 
@@ -49,8 +50,18 @@ def create_answer_db(db: Session, answer: schemas.AnswerCreate): # Renamed to av
     db.refresh(db_answer)
     return db_answer
 
-def get_answers_by_user(db: Session, user_id: int) -> List[schemas.Answer]:
-    return db.query(models.Answer).filter(models.Answer.user_id == user_id).all()
+def get_answers_by_user(
+    db: Session,
+    user_id: int,
+    start_date: Optional[datetime.datetime] = None,
+    end_date: Optional[datetime.datetime] = None
+) -> List[schemas.Answer]:
+    query = db.query(models.Answer).filter(models.Answer.user_id == user_id)
+    if start_date:
+        query = query.filter(models.Answer.created_at >= start_date)
+    if end_date:
+        query = query.filter(models.Answer.created_at <= end_date)
+    return query.all()
 
 def get_answer_by_id(db: Session, answer_id: int) -> Optional[schemas.Answer]:
     return db.query(models.Answer).filter(models.Answer.id == answer_id).first()

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, func, ForeignKey, Text, Float, JSON
+from sqlalchemy import Column, Integer, String, DateTime, func, ForeignKey, Text, Float, JSON, Date, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.utils.db import Base
 
@@ -8,7 +8,11 @@ class Question(Base):
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text, nullable=False)
     expected_answers = Column(JSON, nullable=True) # LLM이 생성한 예상 답변 목록
+    user_id = Column(Integer, nullable=True, index=True) # 사용자 ID 추가
+    daily_date = Column(Date, nullable=True) # 오늘의 질문 날짜 (YYYY-MM-DD)
     created_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (UniqueConstraint('user_id', 'daily_date', name='_user_daily_question_uc'),)
 
     answers = relationship("Answer", back_populates="question")
 

@@ -1,13 +1,13 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional
-from datetime import datetime
+from typing import Optional, List
+from datetime import datetime, date # date 타입 임포트
 
 # Question 스키마
-from typing import List
-
 class QuestionBase(BaseModel):
     content: str
     expected_answers: Optional[List[str]] = None
+    user_id: Optional[int] = None # user_id 추가
+    daily_date: Optional[date] = None # daily_date 추가
 
 class QuestionCreate(QuestionBase):
     pass

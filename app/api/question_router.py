@@ -22,6 +22,18 @@ async def get_daily_question(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No recommended question available")
     return recommended_question
 
+@router.get("/daily-questions/history", response_model=List[question_schema.Question])
+async def get_daily_questions_by_date_range(
+    user_id: int,
+    start_date: Optional[datetime.date] = None,
+    end_date: Optional[datetime.date] = None,
+    db: Session = Depends(get_db)
+):
+    questions = crud_service.get_questions_by_user_and_date_range(
+        db=db, user_id=user_id, start_date=start_date, end_date=end_date
+    )
+    return questions
+
 @router.post("/", response_model=question_schema.Question)
 def create_question(question: question_schema.QuestionCreate, db: Session = Depends(get_db)):
     return crud_service.create_question(db=db, question=question) # crud_service로 변경

@@ -7,11 +7,22 @@ from app import models, schemas
 
 # Question CRUD operations
 def create_question(db: Session, question: schemas.QuestionCreate):
-    db_question = models.Question(content=question.content, expected_answers=question.expected_answers)
+    db_question = models.Question(
+        content=question.content,
+        expected_answers=question.expected_answers,
+        user_id=question.user_id, # user_id 추가
+        daily_date=question.daily_date # daily_date 추가
+    )
     db.add(db_question)
     db.commit()
     db.refresh(db_question)
     return db_question
+
+def get_question_by_user_and_date(db: Session, user_id: int, daily_date: datetime.date) -> Optional[models.Question]:
+    return db.query(models.Question).filter(
+        models.Question.user_id == user_id,
+        models.Question.daily_date == daily_date
+    ).first()
 
 def read_questions(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Question).offset(skip).limit(limit).all()
@@ -34,6 +45,19 @@ def delete_question(db: Session, question_id: int): # Corrected parameter name a
         db.delete(db_question)
         db.commit()
     return db_question
+
+def get_questions_by_user_and_date_range(
+    db: Session,
+    user_id: int,
+    start_date: Optional[datetime.date] = None,
+    end_date: Optional[datetime.date] = None
+) -> List[models.Question]:
+    query = db.query(models.Question).filter(models.Question.user_id == user_id)
+    if start_date:
+        query = query.filter(models.Question.daily_date >= start_date)
+    if end_date:
+        query = query.filter(models.Question.daily_date <= end_date)
+    return query.order_by(models.Question.daily_date).all()
 
 # Answer CRUD operations
 def create_answer_db(db: Session, answer: schemas.AnswerCreate): # Renamed to avoid conflict and clarify pure DB operation

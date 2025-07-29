@@ -20,14 +20,34 @@ USER_SERVICE_URL = Config.USER_SERVICE_URL
 # 기존 get_answers_by_user, get_answer_by_id, delete_answer 함수는 crud_service로 이동했으므로 제거
 
 async def get_daily_question(user_id: int, db: Session) -> Optional[schemas.Question]:
-    recommended_question = await get_recommended_question(user_id)
-    if recommended_question:
-        # LLM에서 받은 질문과 예상 답변을 DB에 저장
-        db_question = crud_service.create_question(db=db, question=recommended_question) # crud_service.create_question 사용
-        # LLM에서 받은 질문의 ID를 DB에 저장된 질문의 ID로 업데이트
-        recommended_question.id = db_question.id
-        recommended_question.created_at = db_question.created_at
-    return recommended_question
+    today = datetime.date.today()
+    
+    # 1. 먼저 user_id와 현재 날짜를 기준으로 데이터베이스에서 기존 질문을 조회
+    existing_question = crud_service.get_question_by_user_and_date(db, user_id, today)
+    if existing_question:
+        return existing_question
+
+    # 2. 기존 질문이 없다면 LLM을 통해 새로운 질문을 생성
+    recommended_question_from_llm = await get_recommended_question(user_id)
+    
+    if recommended_question_from_llm:
+        # 3. LLM에서 받은 질문에 user_id와 daily_date를 추가하여 DB에 저장
+        question_to_create = schemas.QuestionCreate(
+            content=recommended_question_from_llm.content,
+            expected_answers=recommended_question_from_llm.expected_answers,
+            user_id=user_id,
+            daily_date=today
+        )
+        db_question = crud_service.create_question(db=db, question=question_to_create)
+        
+        # LLM에서 받은 질문 객체에 DB에서 생성된 ID와 created_at 업데이트
+        recommended_question_from_llm.id = db_question.id
+        recommended_question_from_llm.created_at = db_question.created_at
+        recommended_question_from_llm.user_id = db_question.user_id
+        recommended_question_from_llm.daily_date = db_question.daily_date
+        
+        return recommended_question_from_llm
+    return None
 
 async def create_answer(db: Session, answer: schemas.AnswerCreate):
     # 1. user-service를 호출하여 user_id 유효성 검증

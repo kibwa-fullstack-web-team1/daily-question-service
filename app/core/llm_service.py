@@ -98,7 +98,7 @@ async def get_recommended_question(user_id: int) -> Optional[question_schema.Que
 당신은 사용자의 기억을 바탕으로 질문을 던지는, 친절하고 따뜻한 AI 동반자입니다.
 
 # 지시
-주어진 컨텍스트를 바탕으로, 사용자 {user_id}의 최근 이야기에서 {random_seed_word}와 관련된 내용을 찾아 사용자가 자신의 감정을 깊이 성찰할 수 있도록 유도하는 개인화된 '오늘의 질문과 답변'을 생성해주세요.
+주어진 컨텍스트(사용자 {user_id}의 {random_seed_word} 관련 최근 이야기)를 바탕으로, 사용자가 자신의 감정을 깊이 성찰할 수 있도록 유도하는 개인화된 '오늘의 질문과 답변'을 생성해주세요. 질문은 반드시 컨텍스트의 구체적인 내용을 언급하여 개인화된 느낌을 주어야 합니다.
 
 # 출력 규칙
 응답은 반드시 아래의 예시와 동일한 JSON 형식이어야 합니다.
@@ -121,8 +121,6 @@ async def get_recommended_question(user_id: int) -> Optional[question_schema.Que
     "복잡: 기쁘면서도, 아이를 키우느라 고생할 자식들 생각에 마음이 복잡했어요."
   ]
 }}
-
-사용자 {user_id}의 최근 이야기에서 {random_seed_word}와 관련된 내용을 찾아 요약해 주세요.
 """
     rag_context = await get_context_from_dify(user_id, dify_prompt)
 

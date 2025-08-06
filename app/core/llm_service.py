@@ -43,7 +43,8 @@ async def get_context_from_dify(user_id: int, prompt: str) -> Optional[str]:
             result = response.json()
             
             # Dify 워크플로우 응답 구조에 따라 llm_output 추출
-            llm_output = result.get("data", {}).get("outputs", {}).get("llm_output")
+            # 실제 응답은 result.get("data", {}).get("outputs", {}).get("result") 에 있음
+            llm_output = result.get("data", {}).get("outputs", {}).get("result")
             if llm_output:
                 print(f"Dify workflow successfully returned context for user {user_id}.")
                 return llm_output

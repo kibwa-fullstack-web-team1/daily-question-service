@@ -9,3 +9,4 @@ openai
 python-multipart
 numpy
 confluent-kafka
+pydub

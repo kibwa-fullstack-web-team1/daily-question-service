@@ -10,6 +10,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 애플리케이션 코드 복사
 COPY daily-question-service/app ./app
+
+# ffmpeg 설치
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 COPY daily-question-service/daily-question-service_manage.py .
 
 # 서비스 포트 노출

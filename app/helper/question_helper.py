@@ -5,6 +5,7 @@ import os
 from fastapi import UploadFile # UploadFile 임포트
 import tempfile
 import datetime # datetime 모듈 임포트
+from pydub import AudioSegment # pydub 임포트
 
 from app import models, schemas
 from app.core.llm_service import get_recommended_question, convert_voice_to_text, analyze_voice_with_service, get_embedding
@@ -80,93 +81,103 @@ async def upload_and_save_voice_answer(
     s3_service = S3Service()
 
     file_content = await audio_file.read()
-    file_extension = os.path.splitext(audio_file.filename)[1]
-    object_name = f"voice_answers/{user_id}_{question_id}_{os.urandom(4).hex()}{file_extension}"
-
-    # S3에 오디오 파일 업로드
-    print(f"Attempting S3 upload for object: {object_name}")
-    if not s3_service.upload_file(file_content, object_name):
-        print("S3 upload failed.")
-        return None, "오디오 파일을 S3에 업로드하지 못했습니다."
-    print("S3 upload successful.")
-
-    audio_file_url = s3_service.get_file_url(object_name)
-    if not audio_file_url:
-        print("Failed to get S3 file URL.")
-        return None, "S3 파일 URL을 가져오지 못했습니다."
-    print(f"S3 file URL: {audio_file_url}")
-
-    # S3에서 오디오 파일 다운로드 및 STT 변환
+    original_file_extension = os.path.splitext(audio_file.filename)[1]
+    
+    # 임시 WAV 파일 경로
+    webm_tmp_file_path = None
+    # 임시 MP3 파일 경로
+    mp3_tmp_file_path = None
+    
+    audio_file_url = None
     text_content = None
-    tmp_file_path = None
-    try:
-        # 임시 파일에 저장
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
-            tmp_file.write(file_content)
-            tmp_file_path = tmp_file.name
-        print(f"Temporary audio file saved to: {tmp_file_path}")
-
-        text_content = await convert_voice_to_text(tmp_file_path)
-        print(f"STT conversion successful. Text: {text_content}")
-    except Exception as e:
-        print(f"STT 변환 중 오류 발생: {e}")
-        # STT 변환 실패 시에도 S3 URL은 저장
-    finally:
-        if tmp_file_path and os.path.exists(tmp_file_path):
-            os.remove(tmp_file_path) # 임시 파일 삭제
-            print(f"Temporary file removed: {tmp_file_path}")
-
-    # 음성 분석 서비스 호출
     cognitive_score = None
     analysis_details = None
+    semantic_score = None
+
     try:
+        # 1. 원본 오디오(WebM)를 임시 파일에 저장
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp_webm_file:
+            tmp_webm_file.write(file_content)
+            webm_tmp_file_path = tmp_webm_file.name
+        print(f"Temporary WebM file saved to: {webm_tmp_file_path}")
+
+        # 2. WebM 파일을 MP3로 변환
+        mp3_tmp_file_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
+        AudioSegment.from_file(webm_tmp_file_path, format="webm").export(mp3_tmp_file_path, format="mp3")
+        print(f"Converted WebM to MP3: {mp3_tmp_file_path}")
+
+        # 3. MP3 파일을 S3에 업로드
+        mp3_object_name = f"voice_answers/{user_id}_{question_id}_{os.urandom(4).hex()}.mp3"
+        with open(mp3_tmp_file_path, "rb") as mp3_file_content:
+            if not s3_service.upload_file(mp3_file_content.read(), mp3_object_name):
+                print("S3 MP3 upload failed.")
+                return None, "MP3 오디오 파일을 S3에 업로드하지 못했습니다."
+        print("S3 MP3 upload successful.")
+        audio_file_url = s3_service.get_file_url(mp3_object_name)
+        if not audio_file_url:
+            print("Failed to get S3 MP3 file URL.")
+            return None, "S3 MP3 파일 URL을 가져오지 못했습니다."
+        print(f"S3 MP3 file URL: {audio_file_url}")
+
+        # 4. STT 변환 (원본 WebM 파일 사용)
+        text_content = await convert_voice_to_text(webm_tmp_file_path)
+        print(f"STT conversion successful. Text: {text_content}")
+
+        # 5. 음성 분석 서비스 호출 (MP3 URL 사용)
         print(f"Calling voice analysis service for URL: {audio_file_url}")
         analysis_result = await analyze_voice_with_service(audio_file_url)
         cognitive_score = analysis_result.get("cognitive_score")
         analysis_details = analysis_result.get("details")
         print(f"Voice analysis successful. Score: {cognitive_score}, Details: {analysis_details}")
-    except Exception as e:
-        print(f"음성 분석 서비스 호출 중 오류 발생: {e}")
-        # 분석 실패 시에도 답변은 저장
 
-    # 의미 유사도 점수 계산
-    semantic_score = None
-    if text_content and question_id:
-        question = crud_service.read_question(db=db, question_id=question_id) # crud_service.read_question 사용
-        if question and question.content:
-            question_embedding = await get_embedding(question.content, dimensions=1024)
-            user_answer_embedding = await get_embedding(text_content, dimensions=1024)
+        # 6. 의미 유사도 점수 계산
+        if text_content and question_id:
+            question = crud_service.read_question(db=db, question_id=question_id) # crud_service.read_question 사용
+            if question and question.content:
+                question_embedding = await get_embedding(question.content, dimensions=1024)
+                user_answer_embedding = await get_embedding(text_content, dimensions=1024)
 
-            if question_embedding and user_answer_embedding:
-                relevance_similarity = cosine_similarity(user_answer_embedding, question_embedding)
-                print(f"Relevance similarity between user answer and question: {relevance_similarity}")
+                if question_embedding and user_answer_embedding:
+                    relevance_similarity = cosine_similarity(user_answer_embedding, question_embedding)
+                    print(f"Relevance similarity between user answer and question: {relevance_similarity}")
 
-                # 관련성 게이트: 유사도 임계값 이하일 경우 semantic_score를 0으로 설정
-                if relevance_similarity < 0.2: # 임계값 설정 (조정 가능)
-                    semantic_score = 0.0
-                    print(f"Relevance gate activated: semantic_score set to {semantic_score}")
-                else:
-                    similarities = []
-                    for expected_ans in question.expected_answers:
-                        expected_ans_embedding = await get_embedding(expected_ans, dimensions=1024)
-                        if expected_ans_embedding:
-                            similarity = cosine_similarity(user_answer_embedding, expected_ans_embedding)
-                            similarities.append(similarity)
-                    
-                    if similarities:
-                        # 유사도 점수를 내림차순으로 정렬하고 상위 3개의 평균을 계산
-                        similarities.sort(reverse=True)
-                        top_n_similarities = similarities[:3] # 상위 3개 선택
-                        average_similarity = sum(top_n_similarities) / len(top_n_similarities)
-                        semantic_score = round((average_similarity + 1) / 2 * 100, 2) # -1~1 스케일을 0~100 스케일로 변환
+                    # 관련성 게이트: 유사도 임계값 이하일 경우 semantic_score를 0으로 설정
+                    if relevance_similarity < 0.2: # 임계값 설정 (조정 가능)
+                        semantic_score = 0.0
+                        print(f"Relevance gate activated: semantic_score set to {semantic_score}")
+                    else:
+                        similarities = []
+                        for expected_ans in question.expected_answers:
+                            expected_ans_embedding = await get_embedding(expected_ans, dimensions=1024)
+                            if expected_ans_embedding:
+                                similarity = cosine_similarity(user_answer_embedding, expected_ans_embedding)
+                                similarities.append(similarity)
                         
-                        # 시그모이드 매핑 적용
-                        mapped_semantic_score = sigmoid_mapping(semantic_score, k=0.1, x0=50.0)
-                        semantic_score = round(mapped_semantic_score, 2)
+                        if similarities:
+                            # 유사도 점수를 내림차순으로 정렬하고 상위 3개의 평균을 계산
+                            similarities.sort(reverse=True)
+                            top_n_similarities = similarities[:3] # 상위 3개 선택
+                            average_similarity = sum(top_n_similarities) / len(top_n_similarities)
+                            semantic_score = round((average_similarity + 1) / 2 * 100, 2) # -1~1 스케일을 0~100 스케일로 변환
+                            
+                            # 시그모이드 매핑 적용
+                            mapped_semantic_score = sigmoid_mapping(semantic_score, k=0.1, x0=50.0)
+                            semantic_score = round(mapped_semantic_score, 2)
 
-                        print(f"Semantic similarity scores: {similarities}")
-                        print(f"Top 3 average semantic similarity score (before sigmoid): {round((average_similarity + 1) / 2 * 100, 2)}")
-                        print(f"Mapped semantic score (after sigmoid): {semantic_score}")
+                            print(f"Semantic similarity scores: {similarities}")
+                            print(f"Top 3 average semantic similarity score (before sigmoid): {round((average_similarity + 1) / 2 * 100, 2)}")
+                            print(f"Mapped semantic score (after sigmoid): {semantic_score}")
+
+    except Exception as e:
+        print(f"오디오 처리 및 분석 중 오류 발생: {e}")
+        return None, f"오디오 처리 및 분석 중 오류 발생: {e}"
+    finally:
+        if webm_tmp_file_path and os.path.exists(webm_tmp_file_path):
+            os.remove(webm_tmp_file_path) # 임시 WebM 파일 삭제
+            print(f"Temporary WebM file removed: {webm_tmp_file_path}")
+        if mp3_tmp_file_path and os.path.exists(mp3_tmp_file_path):
+            os.remove(mp3_tmp_file_path) # 임시 MP3 파일 삭제
+            print(f"Temporary MP3 file removed: {mp3_tmp_file_path}")
 
     answer_create = schemas.AnswerCreate(
         question_id=question_id,

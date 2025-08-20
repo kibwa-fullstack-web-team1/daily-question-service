@@ -9,6 +9,22 @@ from app.config.config import Config
 from app.helper import question_helper
 from app.core.s3_service import S3Service
 from app.core import crud_service # crud_service 임포트 추가
+from fastapi.security import HTTPBearer
+from app.utils.security import decode_access_token
+
+oauth2_scheme = HTTPBearer()
+
+async def get_current_user_validated(token: str = Depends(oauth2_scheme)):
+    payload = decode_access_token(token.credentials)
+    user_id: int = payload.get("sub") # Assuming user_id is stored in the token
+    print(f"[DEBUG] Extracted user_id from token: {user_id}")
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않은 인증 토큰입니다.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user_id
 
 router = APIRouter(
     prefix="/questions",
@@ -16,8 +32,11 @@ router = APIRouter(
 )
 
 @router.get("/daily-questions", response_model=question_schema.Question)
-async def get_daily_question(user_id: int, db: Session = Depends(get_db)):
-    recommended_question = await question_helper.get_daily_question(user_id, db)
+async def get_daily_question(
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_validated)
+):
+    recommended_question = await question_helper.get_daily_question(current_user_id, db)
     if not recommended_question:
         raise HTTPException(status_code=404, detail="No recommended question available")
     return recommended_question
@@ -90,14 +109,14 @@ def delete_answer(answer_id: int, db: Session = Depends(get_db)):
 @router.post("/voice-answers", response_model=question_schema.Answer)
 async def upload_voice_answer(
     question_id: int = Form(...),
-    user_id: int = Form(...),
     audio_file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_validated)
 ):
     db_answer, error_message = await question_helper.upload_and_save_voice_answer(
         db=db,
         question_id=question_id,
-        user_id=user_id,
+        user_id=current_user_id,
         audio_file=audio_file
     )
     if error_message:

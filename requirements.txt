@@ -10,3 +10,5 @@ python-multipart
 numpy
 confluent-kafka
 pydub
+bcrypt
+PyJWT==2.3.0

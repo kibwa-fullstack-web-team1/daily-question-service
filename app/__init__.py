@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware # Import CORSMiddleware
 from app.utils.db import engine, Base
 from app.api import question_router
 from app.config.config import Config
@@ -8,6 +9,17 @@ from app.models.question import Question, Answer
 
 def create_app():
     app = FastAPI()
+
+    # Add CORS middleware
+    origins = ["*"]
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     app.config = Config()
 

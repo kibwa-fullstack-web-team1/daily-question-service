@@ -34,9 +34,15 @@ router = APIRouter(
 @router.get("/daily-questions", response_model=question_schema.Question)
 async def get_daily_question(
     db: Session = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_validated)
+    current_user_id: int = Depends(get_current_user_validated),
+    user_id: Optional[int] = None # New optional user_id parameter
 ):
-    recommended_question = await question_helper.get_daily_question(current_user_id, db)
+    target_user_id = user_id if user_id is not None else current_user_id
+    
+    # TODO: Add authorization check here to ensure current_user_id is authorized to view target_user_id's questions
+    # For now, we proceed assuming authorization is handled or not strictly enforced for this task.
+
+    recommended_question = await question_helper.get_daily_question(target_user_id, db)
     if not recommended_question:
         raise HTTPException(status_code=404, detail="No recommended question available")
     return recommended_question

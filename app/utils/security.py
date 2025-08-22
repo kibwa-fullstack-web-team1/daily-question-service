@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 
 SECRET_KEY = os.environ.get("SECRET_KEY")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "5256000"))
 
 def hash_password(password : str) -> str :
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
